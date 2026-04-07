@@ -11,18 +11,18 @@
 <body>
 
 <header>
-  <h1><span>blg</span> ブクログビューア</h1>
+  <div class="logo"><span>blg</span> ブクログビューア</div>
   <div class="controls">
-    <input type="search" id="search" placeholder="検索...">
+    <input type="search" id="search" placeholder="タイトル・著者・出版社で検索...">
     <select id="status-filter">
-      <option value="">すべて</option>
+      <option value="">ステータス</option>
       <option value="1">読みたい</option>
       <option value="2">いま読んでる</option>
       <option value="3">読み終わった</option>
       <option value="4">積読</option>
     </select>
     <select id="rating-filter">
-      <option value="">★ すべて</option>
+      <option value="">評価</option>
       <option value="5">★★★★★</option>
       <option value="4">★★★★</option>
       <option value="3">★★★</option>
@@ -30,38 +30,52 @@
       <option value="1">★</option>
     </select>
     <select id="category-filter">
-      <option value="">カテゴリ: すべて</option>
+      <option value="">カテゴリ</option>
       {% for cat in categories %}
       <option value="{{ cat }}">{{ cat }}</option>
       {% endfor %}
     </select>
+    <select id="review-filter">
+      <option value="">コメント</option>
+      <option value="has">コメントあり</option>
+      <option value="none">コメントなし</option>
+    </select>
+    <button class="btn-reset" id="reset-filters" title="フィルタをリセット">&#x21bb;</button>
+    <div class="view-toggle">
+      <button class="active" data-view="table" title="テーブル表示">&#9776;</button>
+      <button data-view="card" title="カード表示">&#9638;</button>
+    </div>
   </div>
 </header>
 
 <div class="tab-bar">
-  <button class="active" onclick="document.getElementById('books-view').classList.remove('hidden');document.getElementById('stats-view').classList.add('hidden');this.classList.add('active');this.nextElementSibling.classList.remove('active')">一覧</button>
+  <button class="active" onclick="document.getElementById('books-view').classList.remove('hidden');document.getElementById('stats-view').classList.add('hidden');this.classList.add('active');this.nextElementSibling.classList.remove('active')">一覧 ({{ stats.total }})</button>
   <button onclick="document.getElementById('stats-view').classList.remove('hidden');document.getElementById('books-view').classList.add('hidden');this.classList.add('active');this.previousElementSibling.classList.remove('active')">統計</button>
 </div>
 
 <div class="container">
   <div id="books-view">
-    <div id="book-count"></div>
-    <table>
-      <thead>
-        <tr>
-          <th width="50"></th>
-          <th data-sort="title">タイトル</th>
-          <th data-sort="author">著者</th>
-          <th data-sort="publisher" width="100">出版社</th>
-          <th data-sort="rating" width="70">評価</th>
-          <th data-sort="status_code" width="80">状態</th>
-          <th width="80">棚</th>
-          <th data-sort="pages" width="50">頁</th>
-          <th data-sort="created_at" width="90">登録日</th>
-        </tr>
-      </thead>
-      <tbody id="book-tbody"></tbody>
-    </table>
+    <div class="toolbar">
+      <div id="book-count"></div>
+    </div>
+    <div class="table-view">
+      <table>
+        <thead>
+          <tr>
+            <th class="col-img"></th>
+            <th data-sort="title" class="col-title">タイトル</th>
+            <th data-sort="publisher">出版社</th>
+            <th data-sort="rating">評価</th>
+            <th data-sort="status_code">ステータス</th>
+            <th>棚</th>
+            <th data-sort="pages">頁</th>
+            <th data-sort="created_at">登録日</th>
+          </tr>
+        </thead>
+        <tbody id="book-tbody"></tbody>
+      </table>
+    </div>
+    <div id="card-container" class="card-view hidden"></div>
   </div>
 
   <div id="stats-view" class="hidden">
@@ -69,36 +83,49 @@
       <div class="summary-card"><div class="num">{{ stats.total }}</div><div class="label">総冊数</div></div>
       <div class="summary-card"><div class="num">{{ "{:,}".format(stats.total_pages) }}</div><div class="label">総ページ</div></div>
       <div class="summary-card"><div class="num">{{ stats.avg_pages }}</div><div class="label">平均ページ</div></div>
+      {% for name, cnt in stats.by_status %}
+      <div class="summary-card"><div class="num">{{ cnt }}</div><div class="label">{{ name }}</div></div>
+      {% endfor %}
     </div>
     <div class="stats-grid">
       <div class="stat-card">
-        <h3>ステータス別</h3>
-        {% for name, cnt in stats.by_status %}
-        <div class="stat-row"><span>{{ name }}</span><span>{{ cnt }}</span></div>
-        {% endfor %}
-      </div>
-      <div class="stat-card">
-        <h3>評価別</h3>
+        <h3>評価分布</h3>
         {% for rating, cnt in stats.by_rating %}
-        <div class="stat-row"><span>{{ "★" * rating }}</span><span>{{ cnt }}</span><div class="stat-bar" style="width:{{ cnt * 2 }}px"></div></div>
+        <div class="stat-row">
+          <span>{{ "★" * rating }}</span>
+          <span>{{ cnt }}</span>
+          <div class="stat-bar" style="width:{{ (cnt / stats.by_rating[0][1] * 120)|int }}px"></div>
+        </div>
         {% endfor %}
       </div>
       <div class="stat-card">
         <h3>著者 TOP 20</h3>
         {% for author, cnt in stats.top_authors[:20] %}
-        <div class="stat-row"><span>{{ author }}</span><span>{{ cnt }}</span><div class="stat-bar" style="width:{{ (cnt / stats.top_authors[0][1] * 100)|int }}px"></div></div>
+        <div class="stat-row">
+          <span>{{ author }}</span>
+          <span>{{ cnt }}</span>
+          <div class="stat-bar" style="width:{{ (cnt / stats.top_authors[0][1] * 120)|int }}px"></div>
+        </div>
         {% endfor %}
       </div>
       <div class="stat-card">
         <h3>出版社 TOP 10</h3>
         {% for pub, cnt in stats.top_publishers[:10] %}
-        <div class="stat-row"><span>{{ pub }}</span><span>{{ cnt }}</span><div class="stat-bar" style="width:{{ (cnt / stats.top_publishers[0][1] * 100)|int }}px"></div></div>
+        <div class="stat-row">
+          <span>{{ pub }}</span>
+          <span>{{ cnt }}</span>
+          <div class="stat-bar" style="width:{{ (cnt / stats.top_publishers[0][1] * 120)|int }}px"></div>
+        </div>
         {% endfor %}
       </div>
       <div class="stat-card">
-        <h3>カテゴリ別</h3>
+        <h3>カテゴリ</h3>
         {% for cat, cnt in stats.by_category %}
-        <div class="stat-row"><span>{{ cat }}</span><span>{{ cnt }}</span></div>
+        <div class="stat-row">
+          <span>{{ cat }}</span>
+          <span>{{ cnt }}</span>
+          <div class="stat-bar" style="width:{{ (cnt / stats.by_category[0][1] * 120)|int }}px"></div>
+        </div>
         {% endfor %}
       </div>
     </div>

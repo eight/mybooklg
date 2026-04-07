@@ -37,24 +37,52 @@ def _get_with_retry(url, params, retries=MAX_RETRIES):
     return resp
 
 
-def _fetch_status(user_id: str, status_code: int, status_name: str, on_page=None) -> list[dict]:
-    """Fetch all pages for a single status."""
-    books = []
+def _fetch_pages(user_id: str, status_code: int, extra_params=None, on_page=None) -> list[dict]:
+    """Fetch all pages for a single status with optional extra params."""
+    raw_books = []
     page = 1
     url = BASE_URL.format(user_id=user_id)
     while True:
         params = {"status": status_code, "page": page, "json": "true"}
+        if extra_params:
+            params.update(extra_params)
         resp = _get_with_retry(url, params)
         data = resp.json()
         page_books = data.get("books", [])
         if not page_books:
             break
-        for book in page_books:
-            books.append(_normalize_book(book, status_code, status_name))
+        raw_books.extend(page_books)
         if on_page:
-            on_page(status_name, page, len(books))
+            on_page(page, len(raw_books))
         page += 1
         time.sleep(0.5)
+    return raw_books
+
+
+def _fetch_status(user_id: str, status_code: int, status_name: str, on_page=None) -> list[dict]:
+    """Fetch all books + reviews for a single status."""
+    def _on_page(pg, cnt):
+        if on_page:
+            on_page(status_name, pg, cnt)
+
+    # Fetch all books
+    raw_books = _fetch_pages(user_id, status_code, on_page=_on_page)
+
+    # Fetch reviewed books to get review text
+    reviewed = _fetch_pages(user_id, status_code, extra_params={"reviewed": "1"})
+    review_map = {}
+    for rb in reviewed:
+        review = rb.get("review", {})
+        if review and review.get("description"):
+            review_map[rb["book_id"]] = review["description"]
+
+    # Normalize and merge
+    books = []
+    for book in raw_books:
+        normalized = _normalize_book(book, status_code, status_name)
+        normalized["review"] = review_map.get(book.get("book_id"), "")
+        books.append(normalized)
+
     return books
 
 

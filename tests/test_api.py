@@ -134,7 +134,10 @@ class TestFetchStatus:
     @patch("blg.api._get_with_retry")
     def test_single_page(self, mock_get, mock_sleep):
         mock_get.side_effect = [
+            # First _fetch_pages call (all books)
             MagicMock(json=lambda: {"books": [SAMPLE_API_BOOK]}),
+            MagicMock(json=lambda: {"books": []}),
+            # Second _fetch_pages call (reviewed books)
             MagicMock(json=lambda: {"books": []}),
         ]
         books = _fetch_status("testuser", 3, "読み終わった")
@@ -147,6 +150,8 @@ class TestFetchStatus:
         mock_get.side_effect = [
             MagicMock(json=lambda: {"books": [SAMPLE_API_BOOK]}),
             MagicMock(json=lambda: {"books": [SAMPLE_API_BOOK]}),
+            MagicMock(json=lambda: {"books": []}),
+            # reviewed
             MagicMock(json=lambda: {"books": []}),
         ]
         books = _fetch_status("testuser", 3, "読み終わった")
@@ -165,11 +170,39 @@ class TestFetchStatus:
         mock_get.side_effect = [
             MagicMock(json=lambda: {"books": [SAMPLE_API_BOOK]}),
             MagicMock(json=lambda: {"books": []}),
+            # reviewed
+            MagicMock(json=lambda: {"books": []}),
         ]
         calls = []
         _fetch_status("testuser", 3, "読み終わった", on_page=lambda *a: calls.append(a))
         assert len(calls) == 1
         assert calls[0] == ("読み終わった", 1, 1)
+
+    @patch("blg.api.time.sleep")
+    @patch("blg.api._get_with_retry")
+    def test_review_merged(self, mock_get, mock_sleep):
+        reviewed_book = {**SAMPLE_API_BOOK, "review": {"description": "素晴らしい本", "public": "1", "create_on": "2024-01-01"}}
+        mock_get.side_effect = [
+            MagicMock(json=lambda: {"books": [SAMPLE_API_BOOK]}),
+            MagicMock(json=lambda: {"books": []}),
+            # reviewed
+            MagicMock(json=lambda: {"books": [reviewed_book]}),
+            MagicMock(json=lambda: {"books": []}),
+        ]
+        books = _fetch_status("testuser", 3, "読み終わった")
+        assert len(books) == 1
+        assert books[0]["review"] == "素晴らしい本"
+
+    @patch("blg.api.time.sleep")
+    @patch("blg.api._get_with_retry")
+    def test_no_review(self, mock_get, mock_sleep):
+        mock_get.side_effect = [
+            MagicMock(json=lambda: {"books": [SAMPLE_API_BOOK]}),
+            MagicMock(json=lambda: {"books": []}),
+            MagicMock(json=lambda: {"books": []}),
+        ]
+        books = _fetch_status("testuser", 3, "読み終わった")
+        assert books[0]["review"] == ""
 
 
 # --- Fetch all books tests ---

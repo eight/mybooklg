@@ -104,6 +104,7 @@ def query_books(
     search: str | None = None,
     rating: int | None = None,
     category: str | None = None,
+    review: str | None = None,
     limit: int | None = None,
     offset: int = 0,
 ) -> list[dict]:
@@ -116,12 +117,16 @@ def query_books(
         result = [b for b in result if al in (b.get("author", "") + b.get("authors", "")).lower()]
     if search:
         sl = search.lower()
-        result = [b for b in result if sl in f"{b.get('title','')} {b.get('author','')} {b.get('authors','')} {b.get('publisher','')} {b.get('tags','')}".lower()]
+        result = [b for b in result if sl in f"{b.get('title','')} {b.get('author','')} {b.get('authors','')} {b.get('publisher','')} {b.get('tags','')} {b.get('review','')}".lower()]
     if rating is not None:
         result = [b for b in result if b.get("rating") == rating]
     if category:
         cl = category.lower()
         result = [b for b in result if cl in (b.get("category_name", "") or "").lower()]
+    if review == "has":
+        result = [b for b in result if b.get("review")]
+    elif review == "none":
+        result = [b for b in result if not b.get("review")]
 
     key_fn = SORT_KEYS.get(sort, SORT_KEYS["date"])
     is_desc = sort in SORT_DESC

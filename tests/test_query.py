@@ -12,6 +12,7 @@ BOOKS = [
         "rating": 5, "status_code": 3, "status_name": "読み終わった",
         "category_name": "Life", "pages": 672, "tags": "名作",
         "created_at": "2024-05-22 10:00:00", "release_date": "2006-12-01",
+        "review": "マジックリアリズムの最高傑作。圧倒的な世界観。",
     },
     {
         "book_id": "2", "title": "ペスト", "author": "アルベール・カミュ",
@@ -19,6 +20,7 @@ BOOKS = [
         "rating": 4, "status_code": 2, "status_name": "いま読んでる",
         "category_name": "Kindle", "pages": 496, "tags": "",
         "created_at": "2025-11-16 06:18:48", "release_date": "2021-09-14",
+        "review": "",
     },
     {
         "book_id": "3", "title": "浮世の画家", "author": "カズオ・イシグロ",
@@ -26,6 +28,7 @@ BOOKS = [
         "rating": 3, "status_code": 3, "status_name": "読み終わった",
         "category_name": "U-NEXT", "pages": 336, "tags": "UNEXT",
         "created_at": "2025-11-26 18:32:31", "release_date": "2019-01-10",
+        "review": "戦後日本の画家の記憶を辿る。静かで深い。",
     },
     {
         "book_id": "4", "title": "分別と多感", "author": "ジェイン・オースティン",
@@ -33,6 +36,7 @@ BOOKS = [
         "rating": 0, "status_code": 1, "status_name": "読みたい",
         "category_name": "図書館", "pages": 0, "tags": "",
         "created_at": "2026-01-10 12:00:00", "release_date": "",
+        "review": "",
     },
     {
         "book_id": "5", "title": "暴力の人類史 上", "author": "スティーブン・ピンカー",
@@ -40,6 +44,7 @@ BOOKS = [
         "rating": 5, "status_code": 4, "status_name": "積読",
         "category_name": "Life", "pages": 700, "tags": "",
         "created_at": "2017-06-13 00:00:00", "release_date": "2015-01-28",
+        "review": "",
     },
 ]
 
@@ -138,6 +143,36 @@ class TestFilterCategory:
     def test_filter_category_no_match(self):
         result = query_books(BOOKS, category="青空文庫")
         assert len(result) == 0
+
+
+class TestFilterReview:
+    def test_filter_review_has(self):
+        result = query_books(BOOKS, review="has")
+        assert len(result) == 2
+        assert all(b["review"] for b in result)
+
+    def test_filter_review_none(self):
+        result = query_books(BOOKS, review="none")
+        assert len(result) == 3
+        assert all(not b.get("review") for b in result)
+
+    def test_filter_review_none_returns_all(self):
+        result = query_books(BOOKS, review=None)
+        assert len(result) == len(BOOKS)
+
+    def test_search_matches_review_text(self):
+        result = query_books(BOOKS, search="マジックリアリズム")
+        assert len(result) == 1
+        assert result[0]["title"] == "百年の孤独"
+
+    def test_combined_review_and_status(self):
+        result = query_books(BOOKS, review="has", status=3)
+        assert len(result) == 2
+
+    def test_combined_review_and_rating(self):
+        result = query_books(BOOKS, review="has", rating=5)
+        assert len(result) == 1
+        assert result[0]["title"] == "百年の孤独"
 
 
 # --- Search tests ---

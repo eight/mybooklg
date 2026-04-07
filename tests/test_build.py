@@ -102,7 +102,7 @@ class TestCategoryFilter:
 
     def test_default_all_option(self, runner, populated_dir, tmp_path):
         html = build_html(runner, populated_dir, tmp_path / "out.html")
-        assert 'カテゴリ: すべて' in html
+        assert 'カテゴリ' in html
 
     def test_status_filter_options(self, runner, populated_dir, tmp_path):
         html = build_html(runner, populated_dir, tmp_path / "out.html")
@@ -120,7 +120,7 @@ class TestCategoryFilter:
 class TestTabsAndStats:
     def test_tab_buttons_exist(self, runner, populated_dir, tmp_path):
         html = build_html(runner, populated_dir, tmp_path / "out.html")
-        assert '一覧</button>' in html
+        assert '一覧' in html
         assert '統計</button>' in html
 
     def test_tab_onclick_handlers(self, runner, populated_dir, tmp_path):
@@ -152,7 +152,7 @@ class TestTabsAndStats:
     def test_stats_by_rating(self, runner, populated_dir, tmp_path):
         html = build_html(runner, populated_dir, tmp_path / "out.html")
         assert '★★★★★' in html
-        assert '評価別' in html
+        assert '評価分布' in html
 
     def test_stats_top_authors(self, runner, populated_dir, tmp_path):
         html = build_html(runner, populated_dir, tmp_path / "out.html")
@@ -166,7 +166,7 @@ class TestTabsAndStats:
 
     def test_stats_categories(self, runner, populated_dir, tmp_path):
         html = build_html(runner, populated_dir, tmp_path / "out.html")
-        assert 'カテゴリ別' in html
+        assert 'カテゴリ' in html
         assert 'U-NEXT' in html
         assert '図書館' in html
 
