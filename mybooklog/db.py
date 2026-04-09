@@ -1,12 +1,106 @@
 """JSON file storage for booklog data."""
 
 import json
+from dataclasses import dataclass, field
+from datetime import datetime
 from pathlib import Path
 from threading import Lock
+from typing import Any
 
 DEFAULT_DATA_DIR = Path(__file__).resolve().parent.parent / ".mybooklog"
 
 _lock = Lock()
+
+DIFF_FIELDS = frozenset({
+    "title", "author", "authors", "publisher", "rating",
+    "status_code", "status_name", "category_name", "tags",
+    "pages", "review", "read_at", "release_date",
+})
+
+FIELD_LABELS = {
+    "title": "タイトル",
+    "author": "著者",
+    "authors": "著者一覧",
+    "publisher": "出版社",
+    "rating": "評価",
+    "status_code": "ステータスコード",
+    "status_name": "ステータス",
+    "category_name": "カテゴリ",
+    "tags": "タグ",
+    "pages": "ページ数",
+    "review": "レビュー",
+    "read_at": "読了日",
+    "release_date": "発売日",
+}
+
+_CHANGELOG_MAX_ENTRIES = 100
+
+
+@dataclass
+class BookChange:
+    """A single book's change record."""
+    book_id: str
+    title: str
+    change_type: str  # "added" | "removed" | "updated"
+    fields: dict[str, tuple[Any, Any]] = field(default_factory=dict)
+
+
+@dataclass
+class DiffResult:
+    """Result of comparing two book lists."""
+    added: list[BookChange] = field(default_factory=list)
+    removed: list[BookChange] = field(default_factory=list)
+    updated: list[BookChange] = field(default_factory=list)
+
+    @property
+    def has_changes(self) -> bool:
+        return bool(self.added or self.removed or self.updated)
+
+    @property
+    def summary(self) -> str:
+        parts = []
+        if self.added:
+            parts.append(f"追加{len(self.added)}冊")
+        if self.updated:
+            parts.append(f"更新{len(self.updated)}冊")
+        if self.removed:
+            parts.append(f"削除{len(self.removed)}冊")
+        return "、".join(parts) if parts else "変更なし"
+
+
+def diff_books(old_books: list[dict], new_books: list[dict]) -> DiffResult:
+    """Compare two book lists and return structured diff. Pure function, no side effects."""
+    old_map = {b["book_id"]: b for b in old_books}
+    new_map = {b["book_id"]: b for b in new_books}
+
+    result = DiffResult()
+
+    for bid, book in new_map.items():
+        if bid not in old_map:
+            result.added.append(BookChange(
+                book_id=bid, title=book.get("title", ""), change_type="added",
+            ))
+            continue
+        old_book = old_map[bid]
+        changed_fields: dict[str, tuple[Any, Any]] = {}
+        for f in DIFF_FIELDS:
+            old_val = old_book.get(f)
+            new_val = book.get(f)
+            if old_val != new_val:
+                changed_fields[f] = (old_val, new_val)
+        if changed_fields:
+            result.updated.append(BookChange(
+                book_id=bid, title=book.get("title", ""),
+                change_type="updated", fields=changed_fields,
+            ))
+
+    for bid, book in old_map.items():
+        if bid not in new_map:
+            result.removed.append(BookChange(
+                book_id=bid, title=book.get("title", ""), change_type="removed",
+            ))
+
+    return result
 
 
 def _data_dir(data_dir: Path | None = None) -> Path:
@@ -59,6 +153,46 @@ def merge_books(new_books: list[dict], data_dir: Path | None = None) -> tuple[in
             json.dump(all_books, f, ensure_ascii=False, indent=2)
 
         return len(all_books), len(all_books) - before
+
+
+def _changelog_path(data_dir: Path | None = None) -> Path:
+    return _data_dir(data_dir) / "changelog.json"
+
+
+def load_changelog(data_dir: Path | None = None, limit: int | None = None) -> list[dict]:
+    """Load change history entries (newest first)."""
+    p = _changelog_path(data_dir)
+    if not p.exists():
+        return []
+    with open(p, encoding="utf-8") as f:
+        entries = json.load(f)
+    if limit:
+        entries = entries[:limit]
+    return entries
+
+
+def save_changelog_entry(diff: DiffResult, data_dir: Path | None = None):
+    """Append a changelog entry from a DiffResult. Keeps max 100 entries."""
+    entry = {
+        "timestamp": datetime.now().isoformat(),
+        "summary": diff.summary,
+        "added": [{"book_id": c.book_id, "title": c.title} for c in diff.added],
+        "removed": [{"book_id": c.book_id, "title": c.title} for c in diff.removed],
+        "updated": [
+            {"book_id": c.book_id, "title": c.title,
+             "fields": {k: list(v) for k, v in c.fields.items()}}
+            for c in diff.updated
+        ],
+    }
+    p = _changelog_path(data_dir)
+    existing = []
+    if p.exists():
+        with open(p, encoding="utf-8") as f:
+            existing = json.load(f)
+    existing.insert(0, entry)
+    existing = existing[:_CHANGELOG_MAX_ENTRIES]
+    with open(p, "w", encoding="utf-8") as f:
+        json.dump(existing, f, ensure_ascii=False, indent=2)
 
 
 def get_meta(data_dir: Path | None = None) -> dict:

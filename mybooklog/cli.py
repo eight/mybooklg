@@ -55,6 +55,8 @@ def fetch(ctx, user, force, cache_hours):
         total, new = db.merge_books(books, data_dir)
         console.print(f"  [green]{status_name}: {len(books)}冊取得 (新規{new}) → 保存 (計{total}冊)[/green]")
 
+    old_books = db.load_books(data_dir)
+
     console.print(f"[bold]Fetching books for [cyan]{user}[/cyan] (4ステータス並列)...[/bold]")
     books = api.fetch_all_books(user, on_progress=on_progress, on_batch=on_batch)
 
@@ -63,6 +65,73 @@ def fetch(ctx, user, force, cache_hours):
 
     all_books = db.load_books(data_dir)
     console.print(f"[bold green]完了: {len(books)}冊取得, DB: {len(all_books)}冊[/bold green]")
+
+    diff = db.diff_books(old_books, all_books)
+    if diff.has_changes:
+        db.save_changelog_entry(diff, data_dir)
+        _print_diff(diff)
+    else:
+        console.print("[dim]変更なし[/dim]")
+
+
+def _format_field_change(field: str, old_val, new_val) -> str:
+    label = db.FIELD_LABELS.get(field, field)
+    if field == "rating":
+        old_s = "★" * (old_val or 0) if old_val else "なし"
+        new_s = "★" * (new_val or 0) if new_val else "なし"
+        return f"{label} {old_s}→{new_s}"
+    if field == "review":
+        if not old_val and new_val:
+            return f"{label} (追加)"
+        if old_val and not new_val:
+            return f"{label} (削除)"
+        return f"{label} (変更)"
+    return f"{label} {old_val}→{new_val}"
+
+
+def _print_diff(diff: db.DiffResult):
+    console.print(f"\n[bold]── 変更サマリ: {diff.summary} ──[/bold]")
+    if diff.added:
+        console.print(f"  [bold green]追加 {len(diff.added)}冊:[/bold green]")
+        for c in diff.added:
+            console.print(f"    [green]+[/green] 「{c.title}」")
+    if diff.updated:
+        console.print(f"  [bold yellow]更新 {len(diff.updated)}冊:[/bold yellow]")
+        for c in diff.updated:
+            details = ", ".join(_format_field_change(f, o, n) for f, (o, n) in c.fields.items())
+            console.print(f"    [yellow]~[/yellow] 「{c.title}」: {details}")
+    if diff.removed:
+        console.print(f"  [bold red]削除 {len(diff.removed)}冊:[/bold red]")
+        for c in diff.removed:
+            console.print(f"    [red]-[/red] 「{c.title}」")
+
+
+@cli.command()
+@click.option("--limit", "-n", type=int, default=10, help="表示する履歴件数")
+@click.pass_context
+def changes(ctx, limit):
+    """Show recent change history (変更履歴を表示)."""
+    data_dir = ctx.obj["data_dir"]
+    entries = db.load_changelog(data_dir, limit=limit)
+    if not entries:
+        console.print("[yellow]変更履歴がありません。mybooklog fetch を実行してください。[/yellow]")
+        return
+
+    console.print(f"[bold cyan]── 変更履歴 ──[/bold cyan]\n")
+    for entry in entries:
+        ts = entry["timestamp"][:16].replace("T", " ")
+        console.print(f"[bold]{ts}[/bold]  {entry['summary']}")
+        for b in entry.get("added", []):
+            console.print(f"  [green]+[/green] 「{b['title']}」")
+        for b in entry.get("updated", []):
+            fields = b.get("fields", {})
+            details = ", ".join(
+                _format_field_change(f, v[0], v[1]) for f, v in fields.items()
+            )
+            console.print(f"  [yellow]~[/yellow] 「{b['title']}」: {details}")
+        for b in entry.get("removed", []):
+            console.print(f"  [red]-[/red] 「{b['title']}」")
+        console.print()
 
 
 @cli.command("list")
